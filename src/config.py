@@ -8,8 +8,9 @@ import yaml
 logger = logging.getLogger(__name__)
 
 LOCAL_TASKS_DIR = Path(__file__).resolve().parent.parent / "tasks"
-GCS_BUCKET = os.environ.get("TASKS_BUCKET")  # if unset, fall back to local tasks/ dir
-GCS_PREFIX = os.environ.get("TASKS_PREFIX", "tasks/")
+GITHUB_TASKS_REPO = os.environ.get("GITHUB_TASKS_REPO")  # e.g. "andzol/agentx"; if unset, fall back to local tasks/ dir
+GITHUB_TASKS_BRANCH = os.environ.get("GITHUB_TASKS_BRANCH", "main")
+GITHUB_TASKS_PATH = os.environ.get("GITHUB_TASKS_PATH", "tasks")
 SHEETS_SA_KEY_PATH = os.environ.get("SHEETS_SA_KEY_PATH", "/secrets/sheets-sa-key.json")
 USER_AGENT = os.environ.get(
     "SCRAPE_USER_AGENT",
@@ -20,10 +21,12 @@ PRODUCT_PAGE_DELAY_SECONDS = float(os.environ.get("PRODUCT_PAGE_DELAY_SECONDS", 
 
 
 def load_tasks() -> Iterator[dict]:
-    """Yield task dicts, one per YAML file. Reads from GCS if TASKS_BUCKET is
-    set, otherwise from the local tasks/ directory bundled in the image."""
-    if GCS_BUCKET:
-        yield from _load_tasks_from_gcs()
+    """Yield task dicts, one per YAML file. Reads from the GITHUB_TASKS_REPO
+    folder if set (fetched fresh on every run, so a new task just needs a
+    git push - no rebuild/redeploy), otherwise from the local tasks/
+    directory bundled in the image."""
+    if GITHUB_TASKS_REPO:
+        yield from _load_tasks_from_github()
     else:
         yield from _load_tasks_from_local()
 
@@ -36,18 +39,24 @@ def _load_tasks_from_local() -> Iterator[dict]:
         yield task
 
 
-def _load_tasks_from_gcs() -> Iterator[dict]:
-    from google.cloud import storage
+def _load_tasks_from_github() -> Iterator[dict]:
+    import requests
 
-    client = storage.Client()
-    bucket = client.bucket(GCS_BUCKET)
-    blobs = list(bucket.list_blobs(prefix=GCS_PREFIX))
-    if not blobs:
-        logger.warning("No task files found in gs://%s/%s", GCS_BUCKET, GCS_PREFIX)
-    for blob in blobs:
-        if not blob.name.endswith(".yaml"):
-            continue
-        content = blob.download_as_text()
-        task = yaml.safe_load(content)
-        task["_source"] = f"gs://{GCS_BUCKET}/{blob.name}"
+    listing_url = (
+        f"https://api.github.com/repos/{GITHUB_TASKS_REPO}/contents/"
+        f"{GITHUB_TASKS_PATH}?ref={GITHUB_TASKS_BRANCH}"
+    )
+    resp = requests.get(listing_url, headers={"Accept": "application/vnd.github+json"}, timeout=20)
+    resp.raise_for_status()
+    entries = resp.json()
+
+    yaml_entries = [e for e in entries if e["name"].endswith(".yaml")]
+    if not yaml_entries:
+        logger.warning("No task files found in %s/%s@%s", GITHUB_TASKS_REPO, GITHUB_TASKS_PATH, GITHUB_TASKS_BRANCH)
+
+    for entry in sorted(yaml_entries, key=lambda e: e["name"]):
+        raw = requests.get(entry["download_url"], timeout=20)
+        raw.raise_for_status()
+        task = yaml.safe_load(raw.text)
+        task["_source"] = entry["download_url"]
         yield task
