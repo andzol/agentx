@@ -1,0 +1,7 @@
+name: goodreads_listopia
+type: goodreads_listopia
+url: https://www.goodreads.com/list/recently_active_lists
+output: sheets
+sheet_id: 1tQVZVmmFUxdvgmZLMkYVxjHRoDhzoTB114po4CRU5MY
+tab: Sheet1
+dedup_column: B

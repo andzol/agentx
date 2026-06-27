@@ -1,0 +1,6 @@
+name: amazon_free_top_books
+type: amazon_listing
+url: https://www.amazon.com/Best-Sellers-Kindle-Store/zgbs/digital-text?_encoding=UTF8&tf=1
+mode: all_items
+output: php
+endpoint: https://joelbooks.com/script/amazon_tracker_connector.php

@@ -1,0 +1,8 @@
+name: amazon_best_sellers
+type: amazon_listing
+url: https://www.amazon.com/gp/bestsellers/books
+mode: first_item        # rank-1 item only
+output: sheets
+sheet_id: 1c0OSwFTcNaEziHyTpfnIIiZH7Ekz13djSPzOTI_F4F8
+tab: Sheet1
+dedup_column: C          # column holding the product URL

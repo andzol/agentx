@@ -1,0 +1,6 @@
+name: amazon_free_erotica
+type: amazon_listing
+url: https://www.amazon.com/gp/bestsellers/digital-text/157057011/ref=zg_bs?ie=UTF8&tf=1
+mode: all_items
+output: php
+endpoint: https://birdsheaven.com/script/amazon_tracker_birdsheaven_connector.php
