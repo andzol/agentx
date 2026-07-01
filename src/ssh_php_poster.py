@@ -23,27 +23,31 @@ import paramiko
 
 logger = logging.getLogger(__name__)
 
-# SiteGround's SSH daemon appears to rate-limit rapid repeated connections
-# from the same (Cloud Run) source IP - back-to-back connects fail with a
-# bare exit=255 and no stdout/stderr. Spacing connections out and retrying
-# once on failure works around it.
-CONNECT_DELAY_SECONDS = 4
-RETRY_DELAY_SECONDS = 15
+CONNECT_DELAY_SECONDS = 2
 
 
 def _row_dict_for_product(product: dict) -> dict:
     today = date.today()
+
+    def _s(value) -> str:
+        # free_books columns are all NOT NULL; a scraper miss (Python None,
+        # e.g. price/reviews selectors not matching) must never become a
+        # JSON null, or mysqli throws an uncaught NOT NULL exception on
+        # insert (PHP 8.1+ default), which surfaces as a bare exit=255 with
+        # no output at all - very hard to diagnose from the Python side.
+        return "N/A" if value is None else str(value)
+
     return {
-        "book_title": product["title"],
-        "book_name": product["title"],
-        "cover_image": product["cover"],
-        "book_cover_src": product["cover"],
+        "book_title": _s(product["title"]),
+        "book_name": _s(product["title"]),
+        "cover_image": _s(product["cover"]),
+        "book_cover_src": _s(product["cover"]),
         "book_url": f"https://www.amazon.com/dp/{product['asin']}?ref=joelbooks",
-        "author_name": product["author"],
-        "author_name_2": product["author"],
-        "book_price": product["price"],
-        "book_price_2": product["price"],
-        "book_description": product["content"],
+        "author_name": _s(product["author"]),
+        "author_name_2": _s(product["author"]),
+        "book_price": _s(product["price"]),
+        "book_price_2": _s(product["price"]),
+        "book_description": _s(product["content"]),
         "asin": product["asin"],
         "date_added": f"{today.month}/{today.day}/{today.year}",
     }
@@ -51,9 +55,8 @@ def _row_dict_for_product(product: dict) -> dict:
 
 class SSHPoster:
     """Opens a fresh SSH connection per product rather than reusing one
-    connection for many exec calls - SiteGround's SSH daemon enforces a low
-    per-connection session/channel limit, so a persistent connection reused
-    across ~30 products starts failing with exit=255 after the first call."""
+    connection for many exec calls, since paramiko's channel handling over a
+    long-lived connection got unreliable across ~30 sequential exec calls."""
 
     def __init__(self, host: str, port: int, username: str, remote_script: str, remote_tmp_dir: str):
         self.host = host
@@ -76,16 +79,6 @@ class SSHPoster:
 
     def post_product(self, product: dict) -> None:
         time.sleep(CONNECT_DELAY_SECONDS)
-        try:
-            self._attempt(product)
-        except RuntimeError:
-            logger.warning(
-                "SSH insert failed for %s, retrying once after backoff", product.get("asin")
-            )
-            time.sleep(RETRY_DELAY_SECONDS)
-            self._attempt(product)
-
-    def _attempt(self, product: dict) -> None:
         payload = _row_dict_for_product(product)
         remote_path = f"{self.remote_tmp_dir}/payload_{uuid.uuid4().hex}.json"
 
