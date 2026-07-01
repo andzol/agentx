@@ -15,12 +15,20 @@ import io
 import json
 import logging
 import os
+import time
 import uuid
 from datetime import date
 
 import paramiko
 
 logger = logging.getLogger(__name__)
+
+# SiteGround's SSH daemon appears to rate-limit rapid repeated connections
+# from the same (Cloud Run) source IP - back-to-back connects fail with a
+# bare exit=255 and no stdout/stderr. Spacing connections out and retrying
+# once on failure works around it.
+CONNECT_DELAY_SECONDS = 4
+RETRY_DELAY_SECONDS = 15
 
 
 def _row_dict_for_product(product: dict) -> dict:
@@ -67,6 +75,17 @@ class SSHPoster:
         pass
 
     def post_product(self, product: dict) -> None:
+        time.sleep(CONNECT_DELAY_SECONDS)
+        try:
+            self._attempt(product)
+        except RuntimeError:
+            logger.warning(
+                "SSH insert failed for %s, retrying once after backoff", product.get("asin")
+            )
+            time.sleep(RETRY_DELAY_SECONDS)
+            self._attempt(product)
+
+    def _attempt(self, product: dict) -> None:
         payload = _row_dict_for_product(product)
         remote_path = f"{self.remote_tmp_dir}/payload_{uuid.uuid4().hex}.json"
 
