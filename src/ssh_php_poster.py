@@ -11,6 +11,7 @@ cli_insert_free_books.php, deployed once to a private, non-web-accessible
 directory on the server - never reachable by URL, so it can't be scanned or
 quarantined as a suspicious web-facing script either)."""
 
+import io
 import json
 import logging
 import os
@@ -55,8 +56,11 @@ class SSHPoster:
         self.pkey = None
 
     def __enter__(self):
-        key_path = os.environ["AGENTX_SSH_KEY_PATH"]
-        self.pkey = paramiko.Ed25519Key.from_private_key_file(key_path)
+        # Read from an env var (Secret Manager mounted as env var) rather than
+        # a file mount - Cloud Run's secret-volume FUSE mount has been
+        # observed to raise a transient "Input/output error" on first read.
+        key_content = os.environ["AGENTX_SSH_KEY_CONTENT"]
+        self.pkey = paramiko.Ed25519Key.from_private_key(io.StringIO(key_content))
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
