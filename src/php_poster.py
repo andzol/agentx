@@ -51,7 +51,12 @@ def post_product(endpoint: str, product: dict) -> None:
         "asin": values[10],
         "date_added": values[11],
     }
-    headers = {}
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        ),
+    }
     token = os.environ.get("AGENTX_PHP_TOKEN")
     if token:
         headers["X-AgentX-Token"] = token
