@@ -37,6 +37,8 @@ def _best_seller_row(product: dict) -> list:
 def run_amazon_listing_task(task: dict, product_scraper: ProductScraper, dry_run: bool) -> dict:
     html = fetch_html(task["url"])
     product_urls = extract_amazon_listing(html, task["url"], task.get("mode", "all_items"))
+    if task.get("limit"):
+        product_urls = product_urls[: task["limit"]]
     logger.info("[%s] found %d product URL(s)", task["name"], len(product_urls))
 
     products = [product_scraper.scrape(url) for url in product_urls]
