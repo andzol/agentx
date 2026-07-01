@@ -41,48 +41,55 @@ def _row_dict_for_product(product: dict) -> dict:
 
 
 class SSHPoster:
+    """Opens a fresh SSH connection per product rather than reusing one
+    connection for many exec calls - SiteGround's SSH daemon enforces a low
+    per-connection session/channel limit, so a persistent connection reused
+    across ~30 products starts failing with exit=255 after the first call."""
+
     def __init__(self, host: str, port: int, username: str, remote_script: str, remote_tmp_dir: str):
         self.host = host
         self.port = port
         self.username = username
         self.remote_script = remote_script
         self.remote_tmp_dir = remote_tmp_dir
-        self.client = None
-        self.sftp = None
+        self.pkey = None
 
     def __enter__(self):
         key_path = os.environ["AGENTX_SSH_KEY_PATH"]
-        pkey = paramiko.Ed25519Key.from_private_key_file(key_path)
-        self.client = paramiko.SSHClient()
-        self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.client.connect(self.host, port=self.port, username=self.username, pkey=pkey, timeout=20)
-        self.sftp = self.client.open_sftp()
+        self.pkey = paramiko.Ed25519Key.from_private_key_file(key_path)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.sftp:
-            self.sftp.close()
-        if self.client:
-            self.client.close()
+        pass
 
     def post_product(self, product: dict) -> None:
         payload = _row_dict_for_product(product)
         remote_path = f"{self.remote_tmp_dir}/payload_{uuid.uuid4().hex}.json"
-        with self.sftp.open(remote_path, "w") as f:
-            f.write(json.dumps(payload))
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(self.host, port=self.port, username=self.username, pkey=self.pkey, timeout=20)
         try:
-            command = f"php {self.remote_script} {remote_path}"
-            _stdin, stdout, stderr = self.client.exec_command(command, timeout=30)
-            exit_status = stdout.channel.recv_exit_status()
-            out = stdout.read().decode().strip()
-            err = stderr.read().decode().strip()
-            if exit_status != 0 or "OK" not in out:
-                raise RuntimeError(
-                    f"CLI insert failed for {product.get('asin')}: exit={exit_status} stdout={out} stderr={err}"
-                )
-            logger.info("Inserted %s via SSH+PHP-CLI on %s", product.get("asin"), self.host)
-        finally:
+            sftp = client.open_sftp()
             try:
-                self.sftp.remove(remote_path)
-            except IOError:
-                pass
+                with sftp.open(remote_path, "w") as f:
+                    f.write(json.dumps(payload))
+
+                command = f"php {self.remote_script} {remote_path}"
+                _stdin, stdout, stderr = client.exec_command(command, timeout=30)
+                exit_status = stdout.channel.recv_exit_status()
+                out = stdout.read().decode().strip()
+                err = stderr.read().decode().strip()
+                if exit_status != 0 or "OK" not in out:
+                    raise RuntimeError(
+                        f"CLI insert failed for {product.get('asin')}: exit={exit_status} stdout={out} stderr={err}"
+                    )
+                logger.info("Inserted %s via SSH+PHP-CLI on %s", product.get("asin"), self.host)
+            finally:
+                try:
+                    sftp.remove(remote_path)
+                except IOError:
+                    pass
+                sftp.close()
+        finally:
+            client.close()
