@@ -91,10 +91,43 @@ def run_goodreads_listopia_task(task: dict, dry_run: bool) -> dict:
     return {"name": task["name"], "ok": True, "count": written}
 
 
+def run_ssh_test(n: int):
+    """Fast diagnostic: hammer the joelbooks SSH connection N times with
+    fake data, skipping all scraping, to isolate SSH-layer connection
+    issues from the rest of the pipeline."""
+    task = next(t for t in config.load_tasks() if t.get("output") == "ssh_php")
+    fake_products = [
+        {
+            "title": f"SSH Diag Test {i}",
+            "author": "Diag",
+            "asin": f"B000DIAG{i}",
+            "cover": "https://example.com/cover.jpg",
+            "price": "0.00",
+            "content": "diagnostic",
+        }
+        for i in range(n)
+    ]
+    with SSHPoster(
+        task["ssh_host"], task["ssh_port"], task["ssh_username"],
+        task["remote_script"], task["remote_tmp_dir"],
+    ) as poster:
+        for i, p in enumerate(fake_products):
+            try:
+                poster.post_product(p)
+                logger.info("ssh-test %d/%d OK", i + 1, n)
+            except Exception:
+                logger.exception("ssh-test %d/%d FAILED", i + 1, n)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="Extract data but skip Sheets/PHP writes")
+    parser.add_argument("--ssh-test", type=int, default=0, help="Run N fake SSH inserts and exit, skipping scraping")
     args = parser.parse_args()
+
+    if args.ssh_test:
+        run_ssh_test(args.ssh_test)
+        return
 
     tasks = list(config.load_tasks())
     if not tasks:
