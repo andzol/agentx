@@ -52,4 +52,8 @@ def post_product(endpoint: str, product: dict) -> None:
     }
     resp = requests.post(endpoint, data=form_data, timeout=20)
     resp.raise_for_status()
-    logger.info("Posted %s to %s -> %s", product.get("asin"), endpoint, resp.status_code)
+    body = resp.text.strip()
+    if "Error" in body or "error" in body:
+        logger.error("PHP error for %s: %s", product.get("asin"), body)
+        raise RuntimeError(f"PHP endpoint returned error: {body}")
+    logger.info("Posted %s to %s -> %s | %s", product.get("asin"), endpoint, resp.status_code, body)
