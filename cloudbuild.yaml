@@ -24,7 +24,7 @@ steps:
       - "--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/amazon-tracker:${SHORT_SHA}"
       - "--region=${_REGION}"
       - "--set-env-vars=GITHUB_TASKS_REPO=${_GITHUB_TASKS_REPO},SHEETS_SA_KEY_PATH=/secrets/sheets-sa-key.json"
-      - "--set-secrets=/secrets/sheets-sa-key.json=sheets-sa-key:latest"
+      - "--set-secrets=/secrets/sheets-sa-key.json=sheets-sa-key:latest,AGENTX_PHP_TOKEN=agentx-php-token:latest"
       - "--max-retries=1"
       - "--task-timeout=15m"
       - "--memory=1Gi"

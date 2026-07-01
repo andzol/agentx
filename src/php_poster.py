@@ -4,6 +4,7 @@ Amazon Tracker/background.js so the downstream PHP/sheet sync needs no
 changes."""
 
 import logging
+import os
 from datetime import date
 
 import requests
@@ -50,7 +51,11 @@ def post_product(endpoint: str, product: dict) -> None:
         "asin": values[10],
         "date_added": values[11],
     }
-    resp = requests.post(endpoint, data=form_data, timeout=20)
+    headers = {}
+    token = os.environ.get("AGENTX_PHP_TOKEN")
+    if token:
+        headers["X-AgentX-Token"] = token
+    resp = requests.post(endpoint, data=form_data, headers=headers, timeout=20)
     resp.raise_for_status()
     body = resp.text.strip()
     if "Error" in body or "error" in body:
