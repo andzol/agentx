@@ -12,6 +12,7 @@ import php_poster
 import sheets_writer
 from scrape_listing import extract_amazon_listing, extract_goodreads_listopia, fetch_html
 from scrape_product import ProductScraper
+from ssh_php_poster import SSHPoster
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("runner")
@@ -57,6 +58,15 @@ def run_amazon_listing_task(task: dict, product_scraper: ProductScraper, dry_run
     if task["output"] == "php":
         for p in products:
             php_poster.post_product(task["endpoint"], p)
+        return {"name": task["name"], "ok": True, "count": len(products)}
+
+    if task["output"] == "ssh_php":
+        with SSHPoster(
+            task["ssh_host"], task["ssh_port"], task["ssh_username"],
+            task["remote_script"], task["remote_tmp_dir"],
+        ) as poster:
+            for p in products:
+                poster.post_product(p)
         return {"name": task["name"], "ok": True, "count": len(products)}
 
     raise ValueError(f"Unknown output type: {task['output']}")

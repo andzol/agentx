@@ -2,5 +2,9 @@ name: amazon_free_top_books
 type: amazon_listing
 url: https://www.amazon.com/Best-Sellers-Kindle-Store/zgbs/digital-text?_encoding=UTF8&tf=1
 mode: all_items
-output: php
-endpoint: https://joelbooks.com/script/amazon_tracker_connector.php
+output: ssh_php
+ssh_host: ssh.joelbooks.com
+ssh_port: 18765
+ssh_username: u2636-v9kgdpsqfeny
+remote_script: /home/customer/agentx_private/cli_insert_free_books.php
+remote_tmp_dir: /home/customer/agentx_private
